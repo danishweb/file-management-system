@@ -5,7 +5,10 @@ import express, { Express } from "express";
 import { connectDatabase } from "./config/database";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
+import { authenticate } from "./middleware/authenticate";
 import logger from "./utils/logger";
+import folderRoutes from "./routes/folderRoutes";
+import documentRoutes from "./routes/documentRoutes";
 
 const app: Express = express();
 
@@ -13,16 +16,19 @@ const app: Express = express();
 app.use(express.json());
 app.use(requestLogger);
 
-const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9001;
-
 // API Routes
+app.use("/", authenticate, folderRoutes);
+app.use("/documents", authenticate, documentRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
 
+const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9001;
+
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
+
     app.listen(PORT, (): void => {
       logger.info(`Hierarchy service is running at http://localhost:${PORT}`);
     });
@@ -34,6 +40,7 @@ const startServer = async (): Promise<void> => {
 
 startServer();
 
+// Handle uncaught errors
 process.on("uncaughtException", (error: Error) => {
   logger.error("Uncaught Exception:", error);
   process.exit(1);
