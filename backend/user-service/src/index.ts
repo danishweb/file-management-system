@@ -1,14 +1,13 @@
-import { errorHandler } from "./middleware/errorHandler";
 import { config } from "dotenv";
-import express, { Express, Request, Response, NextFunction } from "express";
-import { requestLogger } from "./middleware/requestLogger";
-import logger from "./utils/logger";
-import { connectDatabase } from "./config/database";
-import userRoutes from "./routes/userRoutes";
-import { NotFoundError } from "./utils/errors";
-
 // Load environment variables
 config();
+
+import express, { Express } from "express";
+import { connectDatabase } from "./config/database";
+import { errorHandler } from "./middleware/errorHandler";
+import { requestLogger } from "./middleware/requestLogger";
+import userRoutes from "./routes/userRoutes";
+import logger from "./utils/logger";
 
 // Initialize express
 const app: Express = express();
@@ -18,14 +17,6 @@ app.use(express.json());
 app.use(requestLogger);
 
 const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9000;
-
-// Health check route (before API routes)
-app.get("/ping", (_req: Request, res: Response): void => {
-  res.json({
-    status: "pong",
-    timestamp: new Date().toISOString(),
-  });
-});
 
 // API Routes
 app.use("/", userRoutes);
