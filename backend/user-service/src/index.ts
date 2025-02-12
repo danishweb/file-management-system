@@ -1,5 +1,4 @@
 import { config } from "dotenv";
-// Load environment variables
 config();
 
 import express, { Express } from "express";
@@ -9,7 +8,6 @@ import { requestLogger } from "./middleware/requestLogger";
 import userRoutes from "./routes/userRoutes";
 import logger from "./utils/logger";
 
-// Initialize express
 const app: Express = express();
 
 // Middleware
@@ -24,7 +22,6 @@ app.use("/", userRoutes);
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server and connect to database
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();

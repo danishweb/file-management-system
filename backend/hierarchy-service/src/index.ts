@@ -1,11 +1,11 @@
-import express, { Express, Request, Response } from "express";
 import { config } from "dotenv";
+config();
+
+import express, { Express } from "express";
+import { connectDatabase } from "./config/database";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
 import logger from "./utils/logger";
-
-// Load environment variables
-config();
 
 const app: Express = express();
 
@@ -15,22 +15,24 @@ app.use(requestLogger);
 
 const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9001;
 
-// health check
-app.get("/ping", (_req: Request, res: Response): void => {
-  res.json({
-    status: "pong",
-    timestamp: new Date().toISOString(),
-  });
-});
+// API Routes
 
 // Error handling middleware
 app.use(errorHandler);
 
-app.listen(PORT, (): void => {
-  logger.info(
-    `[server]: Hierarchy service is running at http://localhost:${PORT}`
-  );
-});
+const startServer = async (): Promise<void> => {
+  try {
+    await connectDatabase();
+    app.listen(PORT, (): void => {
+      logger.info(`Hierarchy service is running at http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    logger.error("Failed to start server:", error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 process.on("uncaughtException", (error: Error) => {
   logger.error("Uncaught Exception:", error);
