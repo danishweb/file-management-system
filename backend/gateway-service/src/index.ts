@@ -35,7 +35,7 @@ const createProxy = (target: string, pathPrefix: string) =>
     pathRewrite: {
       [`^/api${pathPrefix}`]: "",
     },
-    onError: (err: Error, req: Request, res: Response) => {
+    onError: (err: Error, _req: Request, res: Response) => {
       console.error(`Proxy Error: ${err.message}`);
       res.status(500).json({
         error: "Service Unavailable",

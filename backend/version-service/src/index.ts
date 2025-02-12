@@ -1,5 +1,6 @@
 import express, { Express, Request, Response } from "express";
 import { config } from "dotenv";
+import { errorHandler } from "./middleware/errorHandler";
 
 // Load environment variables
 config();
@@ -19,8 +20,23 @@ app.get("/ping", (_req: Request, res: Response): void => {
   });
 });
 
+// Error handling middleware
+app.use(errorHandler);
+
 app.listen(PORT, (): void => {
   console.log(
     `[server]: Version service is running at http://localhost:${PORT}`
   );
+});
+
+
+
+process.on("uncaughtException", (error: Error) => {
+  console.error("Uncaught Exception:", error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (error: Error) => {
+  console.error("Unhandled Rejection:", error);
+  process.exit(1);
 });
