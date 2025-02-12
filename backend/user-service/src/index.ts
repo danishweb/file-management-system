@@ -1,7 +1,6 @@
+import { errorHandler } from "@/middleware/errorHandler";
 import { config } from "dotenv";
 import express, { Express, Request, Response } from "express";
-import { errorHandler } from "./middleware/errorHandler";
-import { NotFoundError } from "./utils/errors";
 
 // Load environment variables
 config();

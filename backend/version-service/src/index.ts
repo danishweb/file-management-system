@@ -1,6 +1,6 @@
 import express, { Express, Request, Response } from "express";
 import { config } from "dotenv";
-import { errorHandler } from "./middleware/errorHandler";
+import { errorHandler } from "@/middleware/errorHandler";
 
 // Load environment variables
 config();
@@ -10,7 +10,7 @@ const app: Express = express();
 // Middleware
 app.use(express.json());
 
-const PORT: number = process.env.PORT? parseInt(process.env.PORT, 10) : 9002;
+const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9002;
 
 // health check
 app.get("/ping", (_req: Request, res: Response): void => {
@@ -28,8 +28,6 @@ app.listen(PORT, (): void => {
     `[server]: Version service is running at http://localhost:${PORT}`
   );
 });
-
-
 
 process.on("uncaughtException", (error: Error) => {
   console.error("Uncaught Exception:", error);

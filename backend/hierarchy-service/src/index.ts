@@ -1,6 +1,6 @@
 import express, { Express, Request, Response } from "express";
 import { config } from "dotenv";
-import { errorHandler } from "./middleware/errorHandler";
+import { errorHandler } from "@/middleware/errorHandler";
 
 // Load environment variables
 config();
@@ -28,8 +28,6 @@ app.listen(PORT, (): void => {
     `[server]: Hierarchy service is running at http://localhost:${PORT}`
   );
 });
-
-
 
 process.on("uncaughtException", (error: Error) => {
   console.error("Uncaught Exception:", error);
