@@ -1,9 +1,14 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { Document } from "../models/Document";
 import { Folder } from "../models/Folder";
+import { BadRequestError, DuplicateError, NotFoundError } from "../utils/errors";
 
 // Create document
-export const createDocument = async (req: Request, res: Response) => {
+export const createDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { title, content, folderId } = req.body;
     const userId = req.user?.id;
@@ -12,7 +17,7 @@ export const createDocument = async (req: Request, res: Response) => {
     if (folderId) {
       const folder = await Folder.findOne({ _id: folderId, userId });
       if (!folder) {
-        return res.status(404).json({ message: "Folder not found" });
+        throw new NotFoundError("Folder not found");
       }
     }
 
@@ -26,45 +31,57 @@ export const createDocument = async (req: Request, res: Response) => {
     await document.save();
     res.status(201).json(document);
   } catch (error) {
-    res.status(500).json({ message: "Error creating document", error });
+    next(error);
   }
 };
 
 // Get document details
-export const getDocument = async (req: Request, res: Response) => {
+export const getDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
+    if (!id) throw new BadRequestError("Document ID is required");
+
     const document = await Document.findOne({ _id: id, userId });
     if (!document) {
-      return res.status(404).json({ message: "Document not found" });
+      throw new NotFoundError("Document not found");
     }
 
     res.json(document);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching document", error });
+    next(error);
   }
 };
 
 // Update document
-export const updateDocument = async (req: Request, res: Response) => {
+export const updateDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
     const { title, content, folderId } = req.body;
     const userId = req.user?.id;
 
+    if (!id) throw new BadRequestError("Document ID is required");
+
     // Validate folder if specified
     if (folderId) {
       const folder = await Folder.findOne({ _id: folderId, userId });
       if (!folder) {
-        return res.status(404).json({ message: "Folder not found" });
+        throw new NotFoundError("Folder not found");
       }
     }
 
     const document = await Document.findOne({ _id: id, userId });
     if (!document) {
-      return res.status(404).json({ message: "Document not found" });
+      throw new NotFoundError("Document not found");
     }
 
     document.title = title || document.title;
@@ -74,36 +91,46 @@ export const updateDocument = async (req: Request, res: Response) => {
     await document.save();
     res.json(document);
   } catch (error) {
-    res.status(500).json({ message: "Error updating document", error });
+    next(error);
   }
 };
 
 // Delete document
-export const deleteDocument = async (req: Request, res: Response) => {
+export const deleteDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
+    if (!id) throw new BadRequestError("Document ID is required");
+
     const document = await Document.findOne({ _id: id, userId });
-    if (!document) {
-      return res.status(404).json({ message: "Document not found" });
+    if (!document || document.isDeleted) {
+      throw new NotFoundError("Document not found");
     }
 
-    await document.deleteOne();
+    await Document.softDelete(id);
     res.json({ message: "Document deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Error deleting document", error });
+    next(error);
   }
 };
 
 // Search documents
-export const searchDocuments = async (req: Request, res: Response) => {
+export const searchDocuments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { query } = req.query;
     const userId = req.user?.id;
 
     if (!query) {
-      return res.status(400).json({ message: "Search query is required" });
+      throw new BadRequestError("Search query is required");
     }
 
     const documents = await Document.find({
@@ -119,17 +146,21 @@ export const searchDocuments = async (req: Request, res: Response) => {
 
     res.json(results);
   } catch (error) {
-    res.status(500).json({ message: "Error searching documents", error });
+    next(error);
   }
 };
 
 // Get total documents count
-export const getTotalDocuments = async (req: Request, res: Response) => {
+export const getTotalDocuments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const userId = req.user?.id;
     const count = await Document.countDocuments({ userId });
     res.json({ totalDocuments: count });
   } catch (error) {
-    res.status(500).json({ message: "Error getting document count", error });
+    next(error);
   }
 };

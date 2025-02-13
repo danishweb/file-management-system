@@ -56,7 +56,7 @@ export class ForbiddenError extends AppError {
 }
 
 export class DuplicateError extends AppError {
-  constructor(field: string) {
-    super(`${field} already exists`, 409);
+  constructor(message: string) {
+    super(message, 409);
   }
 }

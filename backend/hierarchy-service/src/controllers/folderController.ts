@@ -1,27 +1,40 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { Document } from "../models/Document";
 import { Folder } from "../models/Folder";
+import {
+  BadRequestError,
+  DuplicateError,
+  NotFoundError,
+} from "../utils/errors";
 
 // Get root level folders
-export const getRootFolders = async (req: Request, res: Response) => {
+export const getRootFolders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const userId = req.user?.id;
     const folders = await Folder.find({ userId, parentFolder: null });
     res.json(folders);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching root folders", error });
+    next(error);
   }
 };
 
 // Get folder contents (subfolders and documents)
-export const getFolderContents = async (req: Request, res: Response) => {
+export const getFolderContents = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { folderId } = req.params;
     const userId = req.user?.id;
 
     const folder = await Folder.findOne({ _id: folderId, userId });
     if (!folder) {
-      return res.status(404).json({ message: "Folder not found" });
+      throw new NotFoundError("Folder not found");
     }
 
     const [subfolders, documents] = await Promise.all([
@@ -35,12 +48,16 @@ export const getFolderContents = async (req: Request, res: Response) => {
       documents,
     });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching folder contents", error });
+    next(error);
   }
 };
 
 // Create new folder
-export const createFolder = async (req: Request, res: Response) => {
+export const createFolder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { name, parentFolder } = req.body;
     const userId = req.user?.id;
@@ -52,7 +69,7 @@ export const createFolder = async (req: Request, res: Response) => {
         userId,
       });
       if (!parentFolderDoc) {
-        return res.status(404).json({ message: "Parent folder not found" });
+        throw new NotFoundError("Parent folder not found");
       }
     }
 
@@ -64,27 +81,28 @@ export const createFolder = async (req: Request, res: Response) => {
     });
 
     if (existingFolder) {
-      return res.status(400).json({
-        message: "Folder with this name already exists in this location",
-      });
+      throw new DuplicateError("Folder with this name already exists");
     }
 
     const folder = new Folder({
       name,
       userId,
       parentFolder: parentFolder || null,
-      path: `${parentFolder || ""}/${name}`,
     });
 
     await folder.save();
     res.status(201).json(folder);
   } catch (error) {
-    res.status(500).json({ message: "Error creating folder", error });
+    next(error);
   }
 };
 
 // Update folder
-export const updateFolder = async (req: Request, res: Response) => {
+export const updateFolder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -92,7 +110,7 @@ export const updateFolder = async (req: Request, res: Response) => {
 
     const folder = await Folder.findOne({ _id: id, userId });
     if (!folder) {
-      return res.status(404).json({ message: "Folder not found" });
+      throw new NotFoundError("Folder not found");
     }
 
     // Check for duplicate folder name in the same level
@@ -104,51 +122,38 @@ export const updateFolder = async (req: Request, res: Response) => {
     });
 
     if (existingFolder) {
-      return res.status(400).json({
-        message: "Folder with this name already exists in this location",
-      });
+      throw new DuplicateError("Folder with this name already exists");
     }
 
     folder.name = name;
     await folder.save();
     res.json(folder);
   } catch (error) {
-    res.status(500).json({ message: "Error updating folder", error });
+    next(error);
   }
 };
 
 // Delete folder and its contents
-export const deleteFolder = async (req: Request, res: Response) => {
+export const deleteFolder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
+    if (!id) throw new BadRequestError("Folder ID is required");
+
     const folder = await Folder.findOne({ _id: id, userId });
-    if (!folder) {
-      return res.status(404).json({ message: "Folder not found" });
+    if (!folder || folder.isDeleted) {
+      throw new NotFoundError("Folder not found");
     }
 
-    // Get all subfolder paths recursively
-    const subfolders = await Folder.find({
-      userId,
-      path: { $regex: `^${folder.path}/` },
-    });
-
-    const folderIds = [id, ...subfolders.map((f) => f._id)];
-
-    // Delete all documents in the folders
-    await Document.deleteMany({
-      userId,
-      folderId: { $in: folderIds },
-    });
-
-    // Delete all subfolders
-    await Folder.deleteMany({
-      _id: { $in: folderIds },
-    });
+    await Folder.softDelete(id);
 
     res.json({ message: "Folder and its contents deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Error deleting folder", error });
+    next(error);
   }
 };

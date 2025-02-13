@@ -55,7 +55,7 @@ const folderSchema = new Schema<IFolder, IFolderModel>(
     },
     path: {
       type: String,
-      required: true,
+      default: "",
     },
     isDeleted: {
       type: Boolean,
