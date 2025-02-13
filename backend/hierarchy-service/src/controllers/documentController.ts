@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 import { Document } from "../models/Document";
 import { Folder } from "../models/Folder";
-import { BadRequestError, DuplicateError, NotFoundError } from "../utils/errors";
+import { NotFoundError } from "../utils/errors";
+import { deleteFromS3, generatePresignedUrl, uploadToS3 } from "../utils/s3";
 
 // Create document
 export const createDocument = async (
@@ -10,10 +11,10 @@ export const createDocument = async (
   next: NextFunction
 ) => {
   try {
-    const { title, content, folderId } = req.body;
+    const { title, folderId } = req.body;
     const userId = req.user?.id;
+    const file = req.file;
 
-    // Validate folder if specified
     if (folderId) {
       const folder = await Folder.findOne({ _id: folderId, userId });
       if (!folder) {
@@ -23,13 +24,29 @@ export const createDocument = async (
 
     const document = new Document({
       title,
-      content,
       userId,
       folderId: folderId || null,
     });
 
+    if (file) {
+      const fileData = await uploadToS3(file, userId!);
+      document.fileKey = fileData.key;
+      document.contentType = file.mimetype;
+      document.size = file.size;
+      document.originalName = file.originalname;
+    }
+
     await document.save();
-    res.status(201).json(document);
+
+    let presignedUrl;
+    if (document.fileKey) {
+      presignedUrl = await generatePresignedUrl(document.fileKey);
+    }
+
+    res.status(201).json({
+      document,
+      presignedUrl,
+    });
   } catch (error) {
     next(error);
   }
@@ -45,14 +62,20 @@ export const getDocument = async (
     const { id } = req.params;
     const userId = req.user?.id;
 
-    if (!id) throw new BadRequestError("Document ID is required");
-
     const document = await Document.findOne({ _id: id, userId });
     if (!document) {
       throw new NotFoundError("Document not found");
     }
 
-    res.json(document);
+    let presignedUrl;
+    if (document.fileKey) {
+      presignedUrl = await generatePresignedUrl(document.fileKey);
+    }
+
+    res.json({
+      document,
+      presignedUrl,
+    });
   } catch (error) {
     next(error);
   }
@@ -66,30 +89,47 @@ export const updateDocument = async (
 ) => {
   try {
     const { id } = req.params;
-    const { title, content, folderId } = req.body;
+    const { title, folderId } = req.body;
     const userId = req.user?.id;
-
-    if (!id) throw new BadRequestError("Document ID is required");
-
-    // Validate folder if specified
-    if (folderId) {
-      const folder = await Folder.findOne({ _id: folderId, userId });
-      if (!folder) {
-        throw new NotFoundError("Folder not found");
-      }
-    }
+    const file = req.file;
 
     const document = await Document.findOne({ _id: id, userId });
     if (!document) {
       throw new NotFoundError("Document not found");
     }
 
-    document.title = title || document.title;
-    document.content = content || document.content;
-    document.folderId = folderId || document.folderId;
+    if (folderId && folderId !== document.folderId?.toString()) {
+      const folder = await Folder.findOne({ _id: folderId, userId });
+      if (!folder) {
+        throw new NotFoundError("Folder not found");
+      }
+      document.folderId = folderId;
+    }
+
+    if (title) document.title = title;
+
+    if (file) {
+      if (document.fileKey) {
+        await deleteFromS3(document.fileKey);
+      }
+
+      const fileData = await uploadToS3(file, userId!);
+      document.fileKey = fileData.key;
+      document.contentType = file.mimetype;
+      document.size = file.size;
+      document.originalName = file.originalname;
+    }
 
     await document.save();
-    res.json(document);
+
+    let presignedUrl;
+    if (document.fileKey)
+      presignedUrl = await generatePresignedUrl(document.fileKey);
+
+    res.json({
+      document,
+      presignedUrl,
+    });
   } catch (error) {
     next(error);
   }
@@ -105,14 +145,19 @@ export const deleteDocument = async (
     const { id } = req.params;
     const userId = req.user?.id;
 
-    if (!id) throw new BadRequestError("Document ID is required");
-
     const document = await Document.findOne({ _id: id, userId });
-    if (!document || document.isDeleted) {
+    if (!document) {
       throw new NotFoundError("Document not found");
     }
 
-    await Document.softDelete(id);
+    if (document.fileKey) {
+      await deleteFromS3(document.fileKey);
+    }
+
+    document.isDeleted = true;
+    document.deletedAt = new Date();
+    await document.save();
+
     res.json({ message: "Document deleted successfully" });
   } catch (error) {
     next(error);
@@ -129,22 +174,13 @@ export const searchDocuments = async (
     const { query } = req.query;
     const userId = req.user?.id;
 
-    if (!query) {
-      throw new BadRequestError("Search query is required");
-    }
-
     const documents = await Document.find({
       userId,
-      $text: { $search: query as string },
-    }).populate("folderId", "path");
+      isDeleted: false,
+      $or: [{ title: { $regex: query, $options: "i" } }],
+    });
 
-    const results = documents.map((doc) => ({
-      id: doc._id,
-      title: doc.title,
-      folderPath: doc.folderId ? (doc.folderId as any).path : "Root",
-    }));
-
-    res.json(results);
+    res.json(documents);
   } catch (error) {
     next(error);
   }
@@ -158,8 +194,8 @@ export const getTotalDocuments = async (
 ) => {
   try {
     const userId = req.user?.id;
-    const count = await Document.countDocuments({ userId });
-    res.json({ totalDocuments: count });
+    const count = await Document.countDocuments({ userId, isDeleted: false });
+    res.json({ count });
   } catch (error) {
     next(error);
   }

@@ -8,11 +8,6 @@ export const createDocumentValidation = [
     .isLength({ max: 255 })
     .withMessage("Document title cannot exceed 255 characters"),
 
-  body("content")
-    .optional()
-    .isString()
-    .withMessage("Content must be a string"),
-
   body("folderId")
     .optional()
     .isMongoId()
@@ -31,11 +26,6 @@ export const updateDocumentValidation = [
     .withMessage("Document title cannot be empty")
     .isLength({ max: 255 })
     .withMessage("Document title cannot exceed 255 characters"),
-
-  body("content")
-    .optional()
-    .isString()
-    .withMessage("Content must be a string"),
 
   body("folderId")
     .optional()
@@ -59,7 +49,5 @@ export const searchDocumentValidation = [
   query("query")
     .trim()
     .notEmpty()
-    .withMessage("Search query is required")
-    .isLength({ max: 100 })
-    .withMessage("Search query cannot exceed 100 characters"),
+    .withMessage("Search query is required"),
 ];

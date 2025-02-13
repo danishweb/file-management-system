@@ -5,6 +5,10 @@ export interface IDocument extends MDocument {
   userId: string;
   folderId: Types.ObjectId | null;
   content: string;
+  fileKey?: string;
+  contentType?: string;
+  size?: number;
+  originalName?: string;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -44,6 +48,19 @@ const documentSchema = new Schema<IDocument, IDocumentModel>(
     content: {
       type: String,
       default: "",
+    },
+    fileKey: {
+      type: String,
+      index: true,
+    },
+    contentType: {
+      type: String,
+    },
+    size: {
+      type: Number,
+    },
+    originalName: {
+      type: String,
     },
     isDeleted: {
       type: Boolean,

@@ -1,31 +1,42 @@
 import { Router } from "express";
+import {
+  createDocument,
+  deleteDocument,
+  getDocument,
+  getTotalDocuments,
+  searchDocuments,
+  updateDocument,
+} from "../controllers/documentController";
+import { uploadMiddleware } from "../middleware/upload";
 import { validate } from "../middleware/validate";
 import {
   createDocumentValidation,
-  updateDocumentValidation,
-  getDocumentValidation,
   deleteDocumentValidation,
+  getDocumentValidation,
   searchDocumentValidation,
+  updateDocumentValidation,
 } from "../validations/document.validation";
-import {
-  createDocument,
-  getDocument,
-  updateDocument,
-  deleteDocument,
-  searchDocuments,
-  getTotalDocuments,
-} from "../controllers/documentController";
 
 const router = Router();
 
-// Create document
-router.post("/", validate(createDocumentValidation), createDocument);
+// Create document with file upload
+router.post(
+  "/",
+  uploadMiddleware,
+  validate(createDocumentValidation),
+  createDocument
+);
 
 // Get document
 router.get("/:id", validate(getDocumentValidation), getDocument);
 
-// Update document
-router.put("/:id", validate(updateDocumentValidation), updateDocument);
+// Update document with file upload
+router.put(
+  "/:id",
+  uploadMiddleware,
+  validate(updateDocumentValidation),
+  updateDocument
+);
 
 // Delete document
 router.delete("/:id", validate(deleteDocumentValidation), deleteDocument);
