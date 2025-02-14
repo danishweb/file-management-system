@@ -11,7 +11,7 @@ export const checkAccess = (
   resourceType: ResourceType,
   requiredRole: AccessRole
 ) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const { id } = matchedData(req);
       const userId = req.user?.id;

@@ -10,7 +10,7 @@ import versionRoutes from "./routes/versionRoutes";
 import logger from "./utils/logger";
 
 const app: Express = express();
-const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9002;
+const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 5003;
 
 // Middleware
 app.use(express.json());

@@ -19,7 +19,7 @@ export const uploadMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
-  // @ts-expect-error
+  // @ts-ignore
   upload(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {

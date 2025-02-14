@@ -86,5 +86,5 @@ export class VersionApiService {
 
 // Export singleton instance
 export const versionApi = new VersionApiService(
-  process.env.VERSION_SERVICE_URL || "http://localhost:9002"
+  process.env.VERSION_SERVICE_URL || "http://localhost:5003"
 );

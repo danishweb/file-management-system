@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { UnauthorizedError } from "../utils/errors";
 import logger from "../utils/logger";
 
-const authenticate = (req: Request, res: Response, next: NextFunction) => {
+const authenticate = (req: Request, _res: Response, next: NextFunction) => {
   try {
     const apiKey = req.headers["x-api-key"];
 

@@ -14,7 +14,7 @@ const app: Express = express();
 app.use(express.json());
 app.use(requestLogger);
 
-const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9000;
+const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 5001;
 
 // API Routes
 app.use("/", userRoutes);

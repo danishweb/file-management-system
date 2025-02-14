@@ -30,7 +30,7 @@ app.get("/total-documents", authenticate, getTotalDocuments);
 // Error handling middleware
 app.use(errorHandler);
 
-const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9001;
+const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 5002;
 
 const startServer = async (): Promise<void> => {
   try {
