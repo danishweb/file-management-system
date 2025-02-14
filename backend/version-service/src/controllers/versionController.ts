@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Version } from "../models/Version";
 import { BadRequestError } from "../utils/errors";
 import logger from "../utils/logger";
-import { uploadToS3, getPresignedUrl } from "../utils/s3";
+import { uploadToS3, getPresignedUrl, deleteFromS3 } from "../utils/s3";
 
 // Get all versions of a document
 export const getAllVersions = async (
@@ -120,6 +120,43 @@ export const createVersion = async (
     });
   } catch (error) {
     logger.error("Error creating version:", error);
+    next(error);
+  }
+};
+
+// Delete all versions of a document
+export const deleteVersions = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+
+    // Find all versions to get their fileKeys
+    const versions = await Version.find({ documentId: id });
+    
+    // Delete files from S3
+    await Promise.all(
+      versions.map(async (version) => {
+        try {
+          // Delete file from S3
+          await deleteFromS3(version.fileKey);
+        } catch (error) {
+          logger.error(`Error deleting file ${version.fileKey} from S3:`, error);
+          // Continue with other deletions even if one fails
+        }
+      })
+    );
+
+    // Delete all versions from database
+    await Version.deleteMany({ documentId: id });
+
+    return res.status(200).json({
+      message: `Successfully deleted all versions for document ${id}`
+    });
+  } catch (error) {
+    logger.error("Error deleting versions:", error);
     next(error);
   }
 };

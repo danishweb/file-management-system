@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response } from "express";
+import { matchedData } from "express-validator";
 import { Document } from "../models/Document";
-import { Folder } from "../models/Folder";
 import { versionApi } from "../services/versionApi";
 import { BadRequestError, NotFoundError } from "../utils/errors";
 import logger from "../utils/logger";
+import { Folder } from "../models/Folder";
 
 // Create document
 export const createDocument = async (
@@ -12,57 +13,52 @@ export const createDocument = async (
   next: NextFunction
 ) => {
   try {
-    const { title, folderId } = req.body;
+    const { title, id: folder } = matchedData(req);
     const userId = req.user?.id;
 
     if (!userId) {
-      throw new Error("User ID is required");
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // Validate folder if provided
-    if (folderId) {
-      const folder = await Folder.findOne({ _id: folderId, userId });
-      if (!folder) {
-        throw new NotFoundError("Folder not found");
-      }
-    }
-
-    // Create document
     const document = new Document({
       title,
-      userId,
-      folderId: folderId || null,
+      folderId: folder || null,
+      createdBy: userId,
+      updatedBy: userId,
+      access: [
+        {
+          userId: userId,
+          role: "owner",
+        },
+      ],
     });
 
-    try {
-      await document.save();
+    await document.save();
 
-      res.status(201).json(document);
-    } catch (error: any) {
-      logger.error("Error creating document:", error);
-      next(error);
-    }
+    res.status(201).json(document);
   } catch (error) {
-    logger.error("Error creating document:", error);
+    console.error(error);
     next(error);
   }
 };
 
-// Get document details
+// Get document
 export const getDocument = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const { id } = matchedData(req);
     const userId = req.user?.id;
 
     // Find document
-    const document = await Document.findOne({ _id: id, userId }).populate(
-      "folderId",
-      "title"
-    );
+    const document = await Document.findOne({
+      _id: id,
+      deletedAt: null,
+      access: { $elemMatch: { userId } },
+      isDeleted: false,
+    }).populate("folderId", "title");
 
     if (!document) {
       throw new NotFoundError("Document not found");
@@ -91,63 +87,61 @@ export const getDocument = async (
       });
     }
   } catch (error) {
+    logger.error("Error getting document:", error);
     next(error);
   }
 };
 
+// Create document version
 export const createVersion = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const { id, versionNumber } = matchedData(req);
     const userId = req.user?.id;
-    const { versionNumber } = req.body;
     const file = req.file;
 
-    if (!file) throw new BadRequestError("File is required");
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
-    const document = await Document.findOne({ _id: id, userId });
+    if (!file) {
+      return res.status(400).json({ message: "File is required" });
+    }
+
+    const document = await Document.findOne({
+      _id: id,
+      deletedAt: null,
+      isDeleted: false,
+      access: { $elemMatch: { userId } },
+    });
+
     if (!document) {
-      throw new NotFoundError("Document not found");
+      return res.status(404).json({ message: "Document not found" });
     }
 
-    try {
-      const versionDetails = await versionApi.createVersion(
-        document.id,
-        file,
-        versionNumber && parseFloat(versionNumber)
-      );
-      return res.status(201).json(versionDetails);
-    } catch (error) {
-      logger.error("Error creating version:", error);
-      if (error instanceof Error) {
-        throw new BadRequestError(error.message);
-      }
-      throw new Error("Failed to create version");
-    }
+    const newVersion = await versionApi.createVersion(id, file, versionNumber);
+
+    res.status(201).json(newVersion);
   } catch (error) {
+    console.error(error);
     next(error);
   }
 };
 
+// Get document versions
 export const getVersions = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-
-    const document = await Document.findOne({ _id: id, userId });
-    if (!document) {
-      throw new NotFoundError("Document not found");
-    }
+    const { id } = matchedData(req);
 
     try {
-      const { versions } = await versionApi.getAllVersions(document.id);
+      const { versions } = await versionApi.getAllVersions(id);
 
       return res.json(versions);
     } catch (error) {
@@ -158,21 +152,26 @@ export const getVersions = async (
       throw new Error("Failed to fetch versions");
     }
   } catch (error) {
+    logger.error("Error getting document:", error);
     next(error);
   }
 };
 
+// Update document
 export const updateDocument = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
-    const { title } = req.body;
+    const { id, title } = matchedData(req);
     const userId = req.user?.id;
 
-    const document = await Document.findOne({ _id: id, userId });
+    const document = await Document.findOne({
+      _id: id,
+      deletedAt: null,
+      access: { $elemMatch: { userId } },
+    });
     if (!document) {
       throw new NotFoundError("Document not found");
     }
@@ -182,13 +181,119 @@ export const updateDocument = async (
     document.updatedAt = new Date();
     await document.save();
 
-    return res.json({
-      id: document._id,
-      title: document.title,
-      createdAt: document.createdAt,
-      updatedAt: document.updatedAt,
+    res.json(document);
+  } catch (error) {
+    logger.error("Error updating document:", error);
+    next(error);
+  }
+};
+
+// Delete document
+export const deleteDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = matchedData(req);
+    const userId = req.user?.id;
+
+    const document = await Document.findOne({
+      _id: id,
+      deletedAt: null,
+      isDeleted: false,
+      access: { $elemMatch: { userId } },
     });
+
+    if (!document) {
+      throw new NotFoundError("Document not found");
+    }
+
+    // Soft delete the document
+    document.isDeleted = true;
+    document.deletedAt = new Date();
+
+    await versionApi.deleteVersions(id);
+
+    await document.save();
+
+    res.json({ message: "Document deleted successfully" });
+  } catch (error) {
+    logger.error("Error deleting document:", error);
+    next(error);
+  }
+};
+
+export const searchDocuments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { search } = matchedData(req);
+    const userId = req.user?.id;
+
+    // Search documents with text index
+    const documents = await Document.find(
+      {
+        $text: { $search: search },
+        deletedAt: null,
+        "access.userId": userId,
+      },
+      { score: { $meta: "textScore" } }
+    )
+      .sort({ score: { $meta: "textScore" } })
+      .populate({
+        path: "folderId",
+        select: "title parentId",
+        match: { deletedAt: null },
+      });
+
+    // Resolve folder paths
+    const results = await Promise.all(
+      documents.map(async (doc) => ({
+        id: doc._id,
+        title: doc.title,
+        folderPath: await getFolderPath(doc.folderId),
+      }))
+    );
+
+    res.json(results);
   } catch (error) {
     next(error);
   }
+};
+
+export const getTotalDocuments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = req.user?.id;
+
+    const totalDocuments = await Document.countDocuments({
+      deletedAt: null,
+      isDeleted: false,
+      "access.userId": userId,
+    });
+
+    res.json({ totalDocuments });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper to build folder path
+const getFolderPath = async (folderId: any): Promise<string> => {
+  const pathSegments: string[] = [];
+  let currentFolder = await Folder.findById(folderId);
+
+  while (currentFolder && currentFolder.parentId) {
+    pathSegments.unshift(currentFolder.name);
+    currentFolder = await Folder.findById(currentFolder.parentId);
+  }
+
+  if (currentFolder) pathSegments.unshift(currentFolder.name);
+  return pathSegments.join("/") || "Root";
 };

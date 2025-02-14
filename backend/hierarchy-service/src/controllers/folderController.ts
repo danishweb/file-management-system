@@ -1,11 +1,11 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
+import { Types } from "mongoose";
 import { Document } from "../models/Document";
 import { Folder } from "../models/Folder";
-import {
-  BadRequestError,
-  DuplicateError,
-  NotFoundError,
-} from "../utils/errors";
+import { DuplicateError, NotFoundError } from "../utils/errors";
+import { propagateAccessChange, validateAccess } from "../utils/permissions";
+import { withTransaction } from "../utils/db";
+import { matchedData } from "express-validator";
 
 // Get root level folders
 export const getRootFolders = async (
@@ -15,144 +15,411 @@ export const getRootFolders = async (
 ) => {
   try {
     const userId = req.user?.id;
-    const folders = await Folder.find({ userId, parentFolder: null });
-    res.json(folders);
+
+    const folders = await Folder.find({
+      parentId: null,
+      isDeleted: false,
+      access: {
+        $elemMatch: { userId: userId },
+      },
+    });
+
+    res.json(
+      folders.map((folder) => ({
+        id: folder._id,
+        name: folder.name,
+        path: folder.path,
+        parentId: folder.parentId,
+        createdAt: folder.createdAt,
+        createdBy: folder.createdBy,
+      }))
+    );
   } catch (error) {
     next(error);
   }
 };
 
-// Get folder contents (subfolders and documents)
+// Get folder contents
 export const getFolderContents = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { folderId } = req.params;
+    const { id } = matchedData(req);
     const userId = req.user?.id;
 
-    const folder = await Folder.findOne({ _id: folderId, userId });
+    const folder = await Folder.findOne({
+      _id: id,
+      isDeleted: false,
+    });
     if (!folder) {
       throw new NotFoundError("Folder not found");
     }
 
     const [subfolders, documents] = await Promise.all([
-      Folder.find({ userId, parentFolder: folderId }),
-      Document.find({ userId, folderId }),
+      Folder.find({
+        parentId: id,
+        isDeleted: false,
+        access: {
+          $elemMatch: { userId: userId },
+        },
+      }),
+      Document.find({
+        folderId: id,
+        isDeleted: false,
+        access: {
+          $elemMatch: { userId: userId },
+        },
+      }).lean(),
     ]);
 
     res.json({
-      folder,
-      subfolders,
-      documents,
+      folder: {
+        id: folder._id,
+        name: folder.name,
+        path: folder.path,
+        parentId: folder.parentId,
+      },
+      contents: {
+        folders: subfolders.map((subfolder) => ({
+          id: subfolder._id,
+          name: subfolder.name,
+          path: subfolder.path,
+          parentId: subfolder.parentId,
+          createdAt: subfolder.createdAt,
+          createdBy: subfolder.createdBy,
+        })),
+        documents: documents.map((doc) => ({
+          id: doc._id,
+          name: doc.title,
+          createdAt: doc.createdAt,
+          createdBy: doc.createdBy,
+        })),
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Create new folder
+// Create folder
 export const createFolder = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { name, parentFolder } = req.body;
+    const { name, parentId } = matchedData(req);
     const userId = req.user?.id;
 
-    // Check if parent folder exists if specified
-    if (parentFolder) {
-      const parentFolderDoc = await Folder.findOne({
-        _id: parentFolder,
-        userId,
-      });
-      if (!parentFolderDoc) {
-        throw new NotFoundError("Parent folder not found");
+    const result = await withTransaction(async (session) => {
+      // If parent folder exists, check if user has editor/owner access
+      if (parentId) {
+        // Check if parent folder exists and is not deleted
+        const parentFolder = await Folder.findOne(
+          {
+            _id: parentId,
+            isDeleted: false,
+          },
+          null,
+          { session }
+        );
+        if (!parentFolder) {
+          throw new NotFoundError("Folder not found");
+        }
+
+        await validateAccess(userId!, parentId, "folder", "editor");
       }
-    }
 
-    // Check for duplicate folder name in the same level
-    const existingFolder = await Folder.findOne({
-      name,
-      userId,
-      parentFolder: parentFolder || null,
+      // Check for duplicate folder name in the same level
+      const existingFolder = await Folder.findOne(
+        {
+          name,
+          parentId: parentId || null,
+          isDeleted: false,
+          access: {
+            $elemMatch: { userId },
+          },
+        },
+        null,
+        { session }
+      );
+
+      if (existingFolder) {
+        throw new DuplicateError("Folder with this name already exists");
+      }
+
+      const folder = new Folder({
+        name,
+        parentId: parentId || null,
+        createdBy: userId,
+        updatedBy: userId,
+        access: [{ userId, role: "owner" }],
+      });
+
+      await folder.save({ session });
+
+      // If parent exists, inherit its access permissions
+      if (parentId) {
+        const parentFolder = await Folder.findById(parentId).session(session);
+        if (parentFolder) {
+          await propagateAccessChange(
+            folder._id as Types.ObjectId,
+            parentFolder.access,
+            session
+          );
+        }
+      }
+
+      return folder;
     });
 
-    if (existingFolder) {
-      throw new DuplicateError("Folder with this name already exists");
-    }
-
-    const folder = new Folder({
-      name,
-      userId,
-      parentFolder: parentFolder || null,
-    });
-
-    await folder.save();
-    res.status(201).json(folder);
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }
 };
 
-// Update folder
+// Update folder name
 export const updateFolder = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
-    const { name } = req.body;
+    const { id, name } = matchedData(req);
+
     const userId = req.user?.id;
 
-    const folder = await Folder.findOne({ _id: id, userId });
-    if (!folder) {
-      throw new NotFoundError("Folder not found");
-    }
+    const result = await withTransaction(async (session) => {
+      const folder = await Folder.findOne(
+        {
+          _id: id,
+          isDeleted: false,
+        },
+        null,
+        { session }
+      );
+      if (!folder) {
+        throw new NotFoundError("Folder not found");
+      }
 
-    // Check for duplicate folder name in the same level
-    const existingFolder = await Folder.findOne({
-      _id: { $ne: id },
-      name,
-      userId,
-      parentFolder: folder.parentFolder,
+      // Check for duplicate name in the same level
+      const existingFolder = await Folder.findOne(
+        {
+          _id: { $ne: id },
+          name: name,
+          parentId: folder.parentId,
+          isDeleted: false,
+        },
+        null,
+        { session }
+      );
+
+      if (existingFolder) {
+        throw new DuplicateError(
+          "Folder with this name already exists in this location"
+        );
+      }
+
+      // Generate the new path for the folder
+      const oldPath = folder.path;
+      const parentFolder = folder.parentId
+        ? await Folder.findById(folder.parentId).session(session)
+        : null;
+      const newPath = parentFolder
+        ? `${parentFolder.path}/${name}`
+        : `/${name}`;
+
+      // Update the current folder with new name and path
+      const updatedFolder = await Folder.findOneAndUpdate(
+        { _id: id },
+        {
+          $set: {
+            name: name,
+            path: newPath,
+            updatedBy: userId,
+          },
+        },
+        { new: true, session }
+      );
+
+      // Update paths of all descendant folders
+      await Folder.updateMany(
+        {
+          path: { $regex: `^${oldPath}/` },
+          isDeleted: false,
+        },
+        [
+          {
+            $set: {
+              path: {
+                $concat: [
+                  newPath,
+                  {
+                    $substr: [
+                      "$path",
+                      { $strLenCP: oldPath },
+                      {
+                        $subtract: [
+                          { $strLenCP: "$path" },
+                          { $strLenCP: oldPath },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              updatedBy: userId,
+            },
+          },
+        ],
+        { session }
+      );
+
+      // Update paths of all descendant documents
+      await Document.updateMany(
+        {
+          path: { $regex: `^${oldPath}/` },
+          isDeleted: false,
+        },
+        [
+          {
+            $set: {
+              path: {
+                $concat: [
+                  newPath,
+                  {
+                    $substr: [
+                      "$path",
+                      { $strLenCP: oldPath },
+                      {
+                        $subtract: [
+                          { $strLenCP: "$path" },
+                          { $strLenCP: oldPath },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              updatedBy: userId,
+            },
+          },
+        ],
+        { session }
+      );
+
+      return updatedFolder;
     });
 
-    if (existingFolder) {
-      throw new DuplicateError("Folder with this name already exists");
-    }
-
-    folder.name = name;
-    await folder.save();
-    res.json(folder);
+    res.json(result);
   } catch (error) {
     next(error);
   }
 };
 
-// Delete folder and its contents
+// Share folder
+export const shareFolder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id, role, targetUserId } = matchedData(req);
+
+    const result = await withTransaction(async (session) => {
+      const folder = await Folder.findOne(
+        {
+          _id: id,
+          isDeleted: false,
+        },
+        null,
+        { session }
+      );
+      if (!folder) {
+        throw new NotFoundError("Folder not found");
+      }
+
+      const existingAccess = folder.access.filter(
+        (entry) => entry.userId.toString() !== targetUserId
+      );
+
+      folder.access = [...existingAccess, { userId: targetUserId, role }];
+      await folder.save({ session });
+
+      // Propagate access changes to subfolders and documents
+      await propagateAccessChange(
+        folder._id as Types.ObjectId,
+        folder.access,
+        session
+      );
+
+      return folder;
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete folder
 export const deleteFolder = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const { id } = matchedData(req);
     const userId = req.user?.id;
 
-    if (!id) throw new BadRequestError("Folder ID is required");
+    await withTransaction(async (session) => {
+      const folder = await Folder.findById(id).session(session);
+      if (!folder) {
+        throw new NotFoundError("Folder not found");
+      }
 
-    const folder = await Folder.findOne({ _id: id, userId });
-    if (!folder || folder.isDeleted) {
-      throw new NotFoundError("Folder not found");
-    }
+      // Soft delete the folder and all its contents
+      await Promise.all([
+        Folder.findOneAndUpdate(
+          { _id: id },
+          {
+            $set: {
+              isDeleted: true,
+              deletedAt: new Date(),
+              deletedBy: userId,
+            },
+          },
+          { session }
+        ),
+        Folder.updateMany(
+          { path: { $regex: `^${folder.path}/` } },
+          {
+            $set: {
+              isDeleted: true,
+              deletedAt: new Date(),
+              deletedBy: userId,
+            },
+          },
+          { session }
+        ),
+        Document.updateMany(
+          { folderId: id },
+          {
+            $set: {
+              isDeleted: true,
+              deletedAt: new Date(),
+              deletedBy: userId,
+            },
+          },
+          { session }
+        ),
+      ]);
+    });
 
-    await Folder.softDelete(id);
-
-    res.json({ message: "Folder and its contents deleted successfully" });
+    res.json({ message: "Folder deleted successfully" });
   } catch (error) {
     next(error);
   }

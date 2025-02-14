@@ -3,12 +3,18 @@ config();
 
 import express, { Express } from "express";
 import { connectDatabase } from "./config/database";
+import {
+  getTotalDocuments,
+  searchDocuments,
+} from "./controllers/documentController";
 import { authenticate } from "./middleware/authenticate";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
+import { validate } from "./middleware/validate";
 import documentRoutes from "./routes/documentRoutes";
 import folderRoutes from "./routes/folderRoutes";
 import logger from "./utils/logger";
+import { searchValidation } from "./validations/document.validation";
 
 const app: Express = express();
 
@@ -19,7 +25,8 @@ app.use(requestLogger);
 // API Routes
 app.use("/", authenticate, folderRoutes);
 app.use("/documents", authenticate, documentRoutes);
-
+app.get("/filter", authenticate, validate(searchValidation), searchDocuments);
+app.get("/total-documents", authenticate, getTotalDocuments);
 // Error handling middleware
 app.use(errorHandler);
 

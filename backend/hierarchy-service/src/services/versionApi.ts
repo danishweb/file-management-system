@@ -72,6 +72,16 @@ export class VersionApiService {
       body: formData,
     });
   }
+
+  public async deleteVersions(documentId: string): Promise<void> {
+    try {
+      await this.fetchApi<void>(`/versions/${documentId}`, {
+        method: "DELETE",
+      });
+    } catch (error) {
+      throw new BadRequestError("Failed to delete versions");
+    }
+  }
 }
 
 // Export singleton instance

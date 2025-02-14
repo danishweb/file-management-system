@@ -1,50 +1,63 @@
-import mongoose, { Document as MDocument, Schema, Model, Types } from "mongoose";
+import mongoose, { Schema, Document as MDocument, Model } from "mongoose";
+
+interface IAccess {
+  userId: string;
+  role: "owner" | "editor" | "viewer";
+}
 
 export interface IDocument extends MDocument {
   title: string;
-  userId: string;
-  folderId: Types.ObjectId | null;
-  content: string;
+  folderId: mongoose.Types.ObjectId | null;
+  createdBy: string;
+  updatedBy: string;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  access: IAccess[];
 }
 
-interface IDocumentModel extends Model<IDocument> {
-  softDelete(documentId: string | Types.ObjectId): Promise<void>;
+interface DocumentModel extends Model<IDocument> {
+  softDelete(documentId: string | mongoose.Types.ObjectId): Promise<void>;
 }
 
-const documentSchema = new Schema<IDocument, IDocumentModel>(
+const documentSchema = new Schema<IDocument, DocumentModel>(
   {
     title: {
       type: String,
-      required: [true, "Document title is required"],
+      required: true,
       trim: true,
-      maxlength: [255, "Document title cannot be longer than 255 characters"],
-    },
-    userId: {
-      type: String,
-      required: [true, "User ID is required"],
-      index: true,
+      validate: {
+        validator: (value: string) => /^[\w\s-]+$/.test(value),
+        message: "Document title contains invalid characters",
+      },
     },
     folderId: {
       type: Schema.Types.ObjectId,
       ref: "Folder",
       default: null,
-      validate: {
-        validator: async function(value: Types.ObjectId | null) {
-          if (!value) return true;
-          const folder = await mongoose.model("Folder").findById(value);
-          return !!folder && !folder.isDeleted;
-        },
-        message: "Folder does not exist or is deleted",
-      },
     },
-    content: {
+    createdBy: {
       type: String,
-      default: "",
+      required: true,
     },
+    updatedBy: {
+      type: String,
+      required: true,
+    },
+    access: [
+      {
+        userId: {
+          type: String,
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["owner", "editor", "viewer"],
+          required: true,
+        },
+      },
+    ],
     isDeleted: {
       type: Boolean,
       default: false,
@@ -60,47 +73,65 @@ const documentSchema = new Schema<IDocument, IDocumentModel>(
   }
 );
 
-// Indexes for efficient querying
-documentSchema.index({ userId: 1, folderId: 1, isDeleted: 1 });
-documentSchema.index({ title: "text", content: "text" });
+// Create text index for search functionality
+documentSchema.index({ title: "text" });
 
-// Pre-save middleware to ensure unique titles within the same folder
-documentSchema.pre("save", async function(next) {
+// Ensure at least one owner exists in access array
+documentSchema.pre<IDocument>("save", function (next) {
+  if (!this.access || !this.access.length) {
+    this.access = [
+      {
+        userId: this.createdBy,
+        role: "owner",
+      },
+    ];
+  }
+
+  const hasOwner = this.access.some((access) => access.role === "owner");
+  if (!hasOwner) {
+    throw new Error("Document must have at least one owner");
+  }
+
+  next();
+});
+
+// Ensure unique title within the same folder
+documentSchema.pre<IDocument>("save", async function (next) {
   if (this.isModified("title") || this.isModified("folderId")) {
-    const DocumentModel = mongoose.model<IDocument>("Document");
-    const existingDoc = await DocumentModel.findOne({
-      title: this.title,
-      folderId: this.folderId,
-      userId: this.userId,
-      isDeleted: false,
+    const existingDoc = await mongoose.model<IDocument>("Document").findOne({
       _id: { $ne: this._id },
+      folderId: this.folderId,
+      title: this.title,
+      isDeleted: false,
     });
+
     if (existingDoc) {
-      next(new Error("A document with this name already exists in this folder"));
+      throw new Error(
+        "A document with this title already exists in the folder"
+      );
     }
   }
   next();
 });
 
+// Indexes for efficient querying
+documentSchema.index({ folderId: 1, title: 1, isDeleted: 1 }, { unique: true });
+documentSchema.index({ "access.userId": 1, "access.role": 1 });
+
 // Static method to soft delete a document
-documentSchema.statics.softDelete = async function(documentId: string | Types.ObjectId): Promise<void> {
-  const document = await this.findById(documentId);
-  if (!document) {
-    throw new Error("Document not found");
-  }
-  
-  document.isDeleted = true;
-  document.deletedAt = new Date();
-  await document.save();
-};
+documentSchema.static(
+  "softDelete",
+  async function (documentId: string | mongoose.Types.ObjectId): Promise<void> {
+    const document = await this.findById(documentId);
+    if (!document || document.isDeleted) return;
 
-// Query middleware to exclude soft-deleted documents by default
-documentSchema.pre(/^find/, function(next) {
-  if (!(this as any)._conditions.includeDeleted) {
-    (this as any).where({ isDeleted: false });
+    document.isDeleted = true;
+    document.deletedAt = new Date();
+    await document.save();
   }
-  delete (this as any)._conditions.includeDeleted;
-  next();
-});
+);
 
-export const Document = mongoose.model<IDocument, IDocumentModel>("Document", documentSchema);
+export const Document = mongoose.model<IDocument, DocumentModel>(
+  "Document",
+  documentSchema
+);

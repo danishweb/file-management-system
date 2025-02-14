@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createVersion,
   getAllVersions,
+  deleteVersions,
 } from "../controllers/versionController";
 import authenticate from "../middleware/authenticate";
 import { uploadMiddleware } from "../middleware/upload";
@@ -25,5 +26,8 @@ router.post(
   validate(createVersionValidation),
   createVersion
 );
+
+// Delete all versions of a document
+router.delete("/:id", deleteVersions);
 
 export default router;

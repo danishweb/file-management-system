@@ -1,62 +1,74 @@
-import mongoose, {
-  Document,
-  Schema,
-  Model,
-  CallbackError,
-  Types,
-} from "mongoose";
+import mongoose, { Schema, Document as MDocument, Model } from "mongoose";
 
-export interface IFolder extends Document {
-  name: string;
+export interface IAccess {
   userId: string;
-  parentFolder: Types.ObjectId | null;
+  role: "owner" | "editor" | "viewer";
+}
+
+export interface IFolder extends MDocument {
+  name: string;
+  parentId: mongoose.Types.ObjectId | null;
   path: string;
+  createdBy: string;
+  updatedBy: string;
+  deletedBy?: string;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  access: IAccess[];
 }
 
-interface IFolderModel extends Model<IFolder> {
-  softDelete(folderId: string | Types.ObjectId): Promise<void>;
+interface FolderModel extends Model<IFolder> {
+  generatePath(folder: IFolder): Promise<string>;
 }
 
-const folderSchema = new Schema<IFolder, IFolderModel>(
+const folderSchema = new Schema<IFolder, FolderModel>(
   {
     name: {
       type: String,
-      required: [true, "Folder name is required"],
+      required: true,
       trim: true,
-      maxlength: [255, "Folder name cannot be longer than 255 characters"],
       validate: {
-        validator: function (value: string) {
-          return !/[<>:"/\\|?*\x00-\x1F]/.test(value); // Invalid characters in folder names
-        },
+        validator: (value: string) => /^[\w\s-]+$/.test(value),
         message: "Folder name contains invalid characters",
       },
     },
-    userId: {
-      type: String,
-      required: [true, "User ID is required"],
-      index: true,
-    },
-    parentFolder: {
+    parentId: {
       type: Schema.Types.ObjectId,
       ref: "Folder",
       default: null,
-      validate: {
-        validator: async function (value: Types.ObjectId | null) {
-          if (!value) return true;
-          const folder = await mongoose.model("Folder").findById(value);
-          return !!folder && !folder.isDeleted;
-        },
-        message: "Parent folder does not exist or is deleted",
-      },
     },
     path: {
       type: String,
+
       default: "",
     },
+    createdBy: {
+      type: String,
+      required: true,
+    },
+    updatedBy: {
+      type: String,
+      required: true,
+    },
+    deletedBy: {
+      type: String,
+      default: null,
+    },
+    access: [
+      {
+        userId: {
+          type: String,
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["owner", "editor", "viewer"],
+          required: true,
+        },
+      },
+    ],
     isDeleted: {
       type: Boolean,
       default: false,
@@ -72,83 +84,54 @@ const folderSchema = new Schema<IFolder, IFolderModel>(
   }
 );
 
-// Indexes for efficient querying
-folderSchema.index(
-  { userId: 1, parentFolder: 1, name: 1, isDeleted: 1 },
-  { unique: true }
-);
-folderSchema.index({ path: 1 });
+// Ensure at least one owner exists in access array
+folderSchema.pre<IFolder>("save", function (next) {
+  if (!this.access || !this.access.length) {
+    this.access = [{ userId: this.createdBy, role: "owner" }];
+  }
+
+  const hasOwner = this.access.some((access) => access.role === "owner");
+  if (!hasOwner) {
+    throw new Error("Folder must have at least one owner");
+  }
+
+  next();
+});
+
+// Path generation method
+folderSchema.statics.generatePath = async function (
+  folder: IFolder
+): Promise<string> {
+  if (!folder.parentId) {
+    return `/${folder.name}`;
+  }
+
+  const parent = await this.findById(folder.parentId);
+  if (!parent) {
+    throw new Error("Parent folder not found");
+  }
+
+  return `${parent.path}/${folder.name}`;
+};
 
 // Pre-save middleware to generate path
 folderSchema.pre("save", async function (next) {
-  if (this.isModified("name") || this.isModified("parentFolder")) {
-    try {
-      let path = this.name;
-      let current = this;
-
-      // Build path by traversing up the folder tree
-      while (current.parentFolder) {
-        const parent = await mongoose
-          .model("Folder")
-          .findById(current.parentFolder);
-        if (!parent || parent.isDeleted) break;
-        path = `${parent.name}/${path}`;
-        current = parent;
-      }
-
-      this.path = path;
-    } catch (error) {
-      return next(error as CallbackError);
+  try {
+    if (this.isModified("name") || this.isModified("parentId")) {
+      this.path = await (this.constructor as FolderModel).generatePath(this);
     }
+    next();
+  } catch (error) {
+    next(error as Error);
   }
-  next();
 });
 
-// Static method to soft delete a folder and its contents
-folderSchema.statics.softDelete = async function (
-  folderId: string | Types.ObjectId
-): Promise<void> {
-  const folder = await this.findById(folderId);
-  if (!folder) {
-    throw new Error("Folder not found");
-  }
+// Indexes for efficient querying
+folderSchema.index({ parentId: 1, name: 1, isDeleted: 1 }, { unique: true });
+folderSchema.index({ path: 1 });
+folderSchema.index({ "access.userId": 1, "access.role": 1 });
 
-  const now = new Date();
-
-  // Soft delete all documents in this folder
-  await mongoose
-    .model("Document")
-    .updateMany(
-      { folderId: folder._id, isDeleted: false },
-      { isDeleted: true, deletedAt: now }
-    );
-
-  // Recursively soft delete all subfolders
-  const FolderModel = mongoose.model<IFolder, IFolderModel>("Folder");
-  const subfolders = await this.find({
-    parentFolder: folder._id,
-    isDeleted: false,
-  });
-  for (const subfolder of subfolders) {
-    await FolderModel.softDelete((subfolder._id as Types.ObjectId).toString());
-  }
-
-  // Soft delete the current folder
-  folder.isDeleted = true;
-  folder.deletedAt = now;
-  await folder.save();
-};
-
-// Query middleware to exclude soft-deleted folders by default
-folderSchema.pre(/^find/, function (next) {
-  if (!(this as any)._conditions.includeDeleted) {
-    (this as any).where({ isDeleted: false });
-  }
-  delete (this as any)._conditions.includeDeleted;
-  next();
-});
-
-export const Folder = mongoose.model<IFolder, IFolderModel>(
+export const Folder = mongoose.model<IFolder, FolderModel>(
   "Folder",
   folderSchema
 );

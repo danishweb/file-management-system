@@ -1,14 +1,8 @@
-import { body, param } from "express-validator";
+import { body, param, query } from "express-validator";
 
 export const createDocumentValidation = [
-  body("title")
-    .trim()
-    .notEmpty()
-    .withMessage("Document title is required")
-    .isLength({ max: 255 })
-    .withMessage("Document title cannot exceed 255 characters"),
-
-  body("folderId").optional().isMongoId().withMessage("Invalid folder ID"),
+  body("title").notEmpty().withMessage("Title is required"),
+  body("id").optional().isMongoId().withMessage("Invalid folder ID"),
 ];
 
 export const getDocumentValidation = [
@@ -29,6 +23,10 @@ export const getVersionsValidation = [
   param("id").isMongoId().withMessage("Invalid document ID"),
 ];
 
+export const deleteDocumentValidation = [
+  param("id").isMongoId().withMessage("Invalid document ID"),
+];
+
 export const updateDocumentValidation = [
   param("id").isMongoId().withMessage("Invalid document ID"),
   body("title")
@@ -38,4 +36,15 @@ export const updateDocumentValidation = [
     .withMessage("Title is required")
     .isLength({ min: 1, max: 255 })
     .withMessage("Title must be between 1 and 255 characters"),
+];
+
+export const searchValidation = [
+  query("search")
+    .trim()
+    .notEmpty()
+    .withMessage("Search is required")
+    .isString()
+    .withMessage("Search must be a string")
+    .isLength({ min: 3 })
+    .withMessage("Search must be at least 3 characters long"),
 ];

@@ -1,18 +1,21 @@
 import { Router } from "express";
+import {
+  createFolder,
+  deleteFolder,
+  getFolderContents,
+  getRootFolders,
+  shareFolder,
+  updateFolder,
+} from "../controllers/folderController";
+import { checkAccess } from "../middleware/checkAccess";
 import { validate } from "../middleware/validate";
 import {
   createFolderValidation,
-  updateFolderValidation,
-  getFolderValidation,
   deleteFolderValidation,
+  getFolderValidation,
+  shareFolderValidation,
+  updateFolderValidation,
 } from "../validations/folder.validation";
-import {
-  getRootFolders,
-  getFolderContents,
-  createFolder,
-  updateFolder,
-  deleteFolder,
-} from "../controllers/folderController";
 
 const router = Router();
 
@@ -21,18 +24,36 @@ router.get("/viewstore", getRootFolders);
 
 // Get folder contents
 router.get(
-  "/viewstore/:folderId",
+  "/viewstore/:id",
   validate(getFolderValidation),
+  checkAccess("folder", "viewer"),
   getFolderContents
 );
 
 // Create folder
 router.post("/folders", validate(createFolderValidation), createFolder);
 
-// Update folder
-router.put("/folders/:id", validate(updateFolderValidation), updateFolder);
+// Update folder name
+router.put(
+  "/folders/:id",
+  validate(updateFolderValidation),
+  checkAccess("folder", "editor"),
+  updateFolder
+);
 
 // Delete folder
-router.delete("/folders/:id", validate(deleteFolderValidation), deleteFolder);
+router.delete(
+  "/folders/:id",
+  validate(deleteFolderValidation),
+  checkAccess("folder", "editor"),
+  deleteFolder
+);
 
+// Share folder
+router.post(
+  "/folders/:id/share",
+  validate(shareFolderValidation),
+  checkAccess("folder", "owner"),
+  shareFolder
+);
 export default router;
