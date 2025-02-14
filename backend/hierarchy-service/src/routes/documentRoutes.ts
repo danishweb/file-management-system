@@ -1,50 +1,43 @@
 import { Router } from "express";
 import {
   createDocument,
-  deleteDocument,
+  createVersion,
   getDocument,
-  getTotalDocuments,
-  searchDocuments,
+  getVersions,
   updateDocument,
 } from "../controllers/documentController";
-import { uploadMiddleware } from "../middleware/upload";
 import { validate } from "../middleware/validate";
 import {
   createDocumentValidation,
-  deleteDocumentValidation,
+  createVersionValidation,
   getDocumentValidation,
-  searchDocumentValidation,
+  getVersionsValidation,
   updateDocumentValidation,
 } from "../validations/document.validation";
+import { uploadMiddleware } from "../middleware/upload";
 
 const router = Router();
 
-// Create document with file upload
-router.post(
-  "/",
-  uploadMiddleware,
-  validate(createDocumentValidation),
-  createDocument
-);
+router.post("/", validate(createDocumentValidation), createDocument);
 
 // Get document
 router.get("/:id", validate(getDocumentValidation), getDocument);
 
-// Update document with file upload
-router.put(
-  "/:id",
+router.put("/:id", validate(updateDocumentValidation), updateDocument);
+
+// Create document version
+router.post(
+  "/:id/version",
   uploadMiddleware,
-  validate(updateDocumentValidation),
-  updateDocument
+  validate(createVersionValidation),
+  createVersion
 );
 
-// Delete document
-router.delete("/:id", validate(deleteDocumentValidation), deleteDocument);
-
-// Search documents
-router.get("/filter", validate(searchDocumentValidation), searchDocuments);
-
-// Get total documents
-router.get("/total-documents", getTotalDocuments);
+// Get document versions
+router.get(
+  "/:id/versions",
+  validate(getVersionsValidation),
+  getVersions
+);
 
 export default router;

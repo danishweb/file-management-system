@@ -3,12 +3,12 @@ config();
 
 import express, { Express } from "express";
 import { connectDatabase } from "./config/database";
+import { authenticate } from "./middleware/authenticate";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
-import { authenticate } from "./middleware/authenticate";
-import logger from "./utils/logger";
-import folderRoutes from "./routes/folderRoutes";
 import documentRoutes from "./routes/documentRoutes";
+import folderRoutes from "./routes/folderRoutes";
+import logger from "./utils/logger";
 
 const app: Express = express();
 
@@ -27,6 +27,7 @@ const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 9001;
 
 const startServer = async (): Promise<void> => {
   try {
+    // Connect to database
     await connectDatabase();
 
     app.listen(PORT, (): void => {

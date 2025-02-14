@@ -6,6 +6,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
+import logger from "./logger";
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION!,
@@ -22,15 +24,21 @@ interface FileUploadResult {
   presignedUrl: string;
 }
 
+/**
+ * Uploads a file to S3 and returns the file key and presigned URL
+ */
 export const uploadToS3 = async (
   file: Express.Multer.File,
   userId: string
 ): Promise<FileUploadResult> => {
   try {
+    // Generate a unique key for the file
     const fileExtension =
       file.originalname.split(".").pop()?.toLowerCase() || "";
-    const key = `${userId}/${uuidv4()}.${fileExtension}`;
+    const randomString = crypto.randomBytes(8).toString("hex");
+    const key = `${userId}/${randomString}.${fileExtension}`;
 
+    // Upload file to S3
     const uploadCommand = new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
@@ -46,22 +54,41 @@ export const uploadToS3 = async (
 
     await s3Client.send(uploadCommand);
 
-    const getCommand = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
-
-    const presignedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 3600,
-    }); // 1 hour
+    // Generate presigned URL for the uploaded file
+    const presignedUrl = await getPresignedUrl(key);
 
     return {
       key,
       presignedUrl,
     };
   } catch (error) {
-    console.error("Error uploading file to S3:", error);
-    throw new Error("Failed to upload file to storage");
+    logger.error("Error uploading to S3:", error);
+    throw new Error("Failed to upload file to S3");
+  }
+};
+
+/**
+ * Generates a presigned URL for accessing a file in S3
+ * URL expires in 1 hour by default
+ */
+export const getPresignedUrl = async (
+  key: string,
+  expiresIn: number = 3600
+): Promise<string> => {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    const presignedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn, // URL expires in 1 hour
+    });
+
+    return presignedUrl;
+  } catch (error) {
+    logger.error("Error generating presigned URL:", error);
+    throw new Error("Failed to generate presigned URL");
   }
 };
 
@@ -74,7 +101,7 @@ export const deleteFromS3 = async (key: string): Promise<void> => {
 
     await s3Client.send(command);
   } catch (error) {
-    console.error("Error deleting file from S3:", error);
+    logger.error("Error deleting file from S3:", error);
     throw new Error("Failed to delete file from storage");
   }
 };
@@ -88,7 +115,7 @@ export const generatePresignedUrl = async (key: string): Promise<string> => {
 
     return await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
   } catch (error) {
-    console.error("Error generating presigned URL:", error);
+    logger.error("Error generating presigned URL:", error);
     throw new Error("Failed to generate file access URL");
   }
 };
