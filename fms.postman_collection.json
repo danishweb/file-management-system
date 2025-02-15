@@ -1,0 +1,636 @@
+{
+	"info": {
+		"_postman_id": "5f747411-a14b-4e6d-9de6-4cd401a91c99",
+		"name": "File Management System",
+		"description": "API collection for testing the File Management System microservices",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "19451856"
+	},
+	"item": [
+		{
+			"name": "User Service",
+			"item": [
+				{
+					"name": "Register User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.accessToken) {",
+									"    pm.environment.set(\"accessToken\", jsonData.accessToken);",
+									"}",
+									"if (jsonData.refreshToken) {",
+									"    pm.environment.set(\"refreshToken\", jsonData.refreshToken);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"testuserII\",\n    \"email\": \"test$@example.com\",\n    \"password\": \"Test123!3\"\n}"
+						},
+						"url": {
+							"raw": "{{USER_SERVICE_URL}}/register",
+							"host": [
+								"{{USER_SERVICE_URL}}"
+							],
+							"path": [
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"",
+									"if (jsonData.accessToken) {",
+									"    pm.environment.set(\"accessToken\", jsonData.accessToken);",
+									"}",
+									"",
+									"if (jsonData.refreshToken) {",
+									"    pm.environment.set(\"refreshToken\", jsonData.refreshToken);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "// User 1\n// {\n//     \"email\": \"test@example.com\",\n//     \"password\": \"Test123!\"\n// }\n\n// User 2\n{\n    \"email\": \"test$@example.com\",\n    \"password\": \"Test123!3\"\n}"
+						},
+						"url": {
+							"raw": "{{USER_SERVICE_URL}}/login",
+							"host": [
+								"{{USER_SERVICE_URL}}"
+							],
+							"path": [
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.accessToken) {",
+									"    pm.environment.set(\"accessToken\", jsonData.accessToken);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{USER_SERVICE_URL}}/refresh",
+							"host": [
+								"{{USER_SERVICE_URL}}"
+							],
+							"path": [
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Hierarchy Service",
+			"item": [
+				{
+					"name": "Folders",
+					"item": [
+						{
+							"name": "Create Folder",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Test\"\n}"
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/folders",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"folders"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Root Folders",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/viewstore",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"viewstore"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Folder Contents",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/viewstore/67af6b5438f845b44de91560",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"viewstore",
+										"67af6b5438f845b44de91560"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Folder",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Physics\"\n}"
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/folders/67af3848623378bb65ca271e",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"folders",
+										"67af3848623378bb65ca271e"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Folder",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/folders/67af27f2008bf2c86a091bb5",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"folders",
+										"67af27f2008bf2c86a091bb5"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Share Folder",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"67af1f1141f7e7495a8434c0\",\n    \"role\":\"editor\"\n}"
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/folders/67af1ec1d20fe37a16a1a8ae/share",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"folders",
+										"67af1ec1d20fe37a16a1a8ae",
+										"share"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Documents",
+					"item": [
+						{
+							"name": "Create Document",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Halo\",\n    \"id\": \"67af6b5438f845b44de91560\"\n}"
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/documents",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"documents"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create Document Version",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "/C:/Users/danis/Downloads/Syed Anas Resume (1) (1).pdf"
+										},
+										{
+											"key": "versionNumber",
+											"value": "2.0",
+											"type": "text",
+											"disabled": true
+										}
+									]
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/documents/67af6d50ceb1c0a4e53cd0bd/version",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"documents",
+										"67af6d50ceb1c0a4e53cd0bd",
+										"version"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Document",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/documents/67af6d50ceb1c0a4e53cd0bd",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"documents",
+										"67af6d50ceb1c0a4e53cd0bd"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Fetch Document Version",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "/C:/Users/danis/Downloads/Syed Anas Resume (1).pdf"
+										},
+										{
+											"key": "versionNumber",
+											"value": "1.9",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/documents/67af494543f4283c3b815e78/versions",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"documents",
+										"67af494543f4283c3b815e78",
+										"versions"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Document",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Song\"\n}"
+								},
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/documents/67af494543f4283c3b815e78",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"documents",
+										"67af494543f4283c3b815e78"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Document",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/documents/67af6d50ceb1c0a4e53cd0bd",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"documents",
+										"67af6d50ceb1c0a4e53cd0bd"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Search Documents",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/filter?search=song",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"filter"
+									],
+									"query": [
+										{
+											"key": "search",
+											"value": "song"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Total Documents",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{accessToken}}"
+									}
+								],
+								"url": {
+									"raw": "{{HIERARCHY_SERVICE_URL}}/total-documents",
+									"host": [
+										"{{HIERARCHY_SERVICE_URL}}"
+									],
+									"path": [
+										"total-documents"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "USER_SERVICE_URL",
+			"value": "http://localhost:5001",
+			"type": "string"
+		},
+		{
+			"key": "HIERARCHY_SERVICE_URL",
+			"value": "http://localhost:5002",
+			"type": "string"
+		}
+	]
+}

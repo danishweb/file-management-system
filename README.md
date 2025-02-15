@@ -4,7 +4,8 @@ A microservices-based file management system built with Node.js, MongoDB, and pn
 
 ## Architecture
 
-The system consists of three microservices:
+The system consists of four microservices:
+- **API Gateway** (Port: 5000): Central entry point for all services
 - **User Service** (Port: 5001): Handles user authentication and management
 - **Hierarchy Service** (Port: 5002): Manages file/folder hierarchy and structure
 - **Version Service** (Port: 5003): Manages file versioning and storage
@@ -54,17 +55,20 @@ The system consists of three microservices:
    pnpm dev
    ```
 
-## Service Endpoints
+## API Endpoints
 
-### User Service (5001)
-- Authentication endpoints
-- User management
+All API requests should go through the API Gateway at `http://localhost:5000/api`
 
-### Hierarchy Service (5002)
+### User Service (`/api/users`)
+- POST `/register` - Register new user
+- POST `/login` - User login
+- POST `/refresh` - Refresh access token
+
+### Hierarchy Service (`/api/hierarchy`)
 - File/folder structure management
 - Connects to Version Service for file operations
 
-### Version Service (5003)
+### Version Service (`/api/versions`)
 - File storage and versioning
 - File upload/download management
 
@@ -77,20 +81,34 @@ The system consists of three microservices:
 
 ## Development Notes
 
-1. **Workspace Structure**
+1. **API Gateway**
+   - Single entry point for all API requests
+   - Routes requests to appropriate microservices
+   - Handles CORS and error scenarios
+   - Health check endpoint at `/health`
+
+2. **Workspace Structure**
    - Uses pnpm workspaces for monorepo management
    - Each service is an independent package
    - Shared dependencies are hoisted to the root
 
-2. **MongoDB Requirements**
+3. **MongoDB Requirements**
    - Transactions are used across services
    - Requires MongoDB replica set
    - Each service uses its own database for isolation
 
-3. **Environment Variables**
+4. **Environment Variables**
    - Each service has its own `.env` file
    - Use `setup-env.sh` to configure all services
    - Never commit `.env` files to version control
+
+## Testing with Postman
+
+A Postman collection is available in the `docs` folder. To use it:
+1. Import the collection into Postman
+2. Set up your environment variables in Postman:
+   - `gateway_url`: http://localhost:5000/api
+   - `access_token`: Your JWT token after login
 
 ## License
 
