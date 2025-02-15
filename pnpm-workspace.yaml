@@ -1,3 +1,4 @@
 packages:
   # Only include backend microservices
   - 'backend/*-service'
+  - frontend
