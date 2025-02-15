@@ -1,8 +1,9 @@
 import { NextFunction, Request, Response } from "express";
+import fs from "fs";
 import { Version } from "../models/Version";
 import { BadRequestError } from "../utils/errors";
+import { deleteFile, getFileUrl } from "../utils/fileStorage";
 import logger from "../utils/logger";
-import { uploadToS3, getPresignedUrl, deleteFromS3 } from "../utils/s3";
 
 // Get all versions of a document
 export const getAllVersions = async (
@@ -18,20 +19,15 @@ export const getAllVersions = async (
       .select("versionNumber fileKey createdAt")
       .lean();
 
-    // Generate presigned URLs for all versions
-    const versionsWithUrls = await Promise.all(
-      versions.map(async (version) => {
-        const presignedUrl = await getPresignedUrl(version.fileKey);
-        return {
-          version: version.versionNumber.toFixed(1),
-          fileUrl: presignedUrl,
-          uploadedAt: version.createdAt,
-        };
-      })
-    );
+    // Generate URLs for all versions
+    const versionsWithUrls = versions.map((version) => ({
+      version: version.versionNumber.toFixed(1),
+      fileUrl: getFileUrl(version.fileKey),
+      uploadedAt: version.createdAt,
+    }));
 
     return res.status(200).json({
-      versions: versionsWithUrls
+      versions: versionsWithUrls,
     });
   } catch (error) {
     logger.error("Error fetching versions:", error);
@@ -46,12 +42,11 @@ export const createVersion = async (
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const { id: documentId } = req.params;
     const { versionNumber } = req.body;
-    const file = req.file;
 
-    if (!file) {
-      throw new BadRequestError("No file uploaded");
+    if (!req.file) {
+      throw new BadRequestError("File is required");
     }
 
     let newVersionNumber: number;
@@ -64,7 +59,7 @@ export const createVersion = async (
       }
 
       const existingVersion = await Version.findOne({
-        documentId: id,
+        documentId,
         versionNumber: versionNum,
       });
 
@@ -74,7 +69,10 @@ export const createVersion = async (
         );
       }
 
-      const isValid = await Version.validateVersionNumber(id!, versionNum);
+      const isValid = await Version.validateVersionNumber(
+        documentId!,
+        versionNum
+      );
       if (!isValid) {
         throw new BadRequestError(
           "Invalid version number. Must be next minor version (e.g., 1.0 -> 1.1) or next major version (e.g., 1.9 -> 2.0)"
@@ -83,7 +81,9 @@ export const createVersion = async (
 
       newVersionNumber = versionNum;
     } else {
-      const latestVersionNumber = await Version.getLatestVersionNumber(id!);
+      const latestVersionNumber = await Version.getLatestVersionNumber(
+        documentId!
+      );
 
       if (latestVersionNumber === 0) {
         newVersionNumber = 1.0;
@@ -100,26 +100,34 @@ export const createVersion = async (
         }
       }
     }
-
-    const { key, presignedUrl } = await uploadToS3(file, id!);
-
-    // Create new version
+    // Create version record with the file path from multer
     const version = await Version.create({
-      documentId: id,
+      documentId,
       versionNumber: newVersionNumber,
-      fileKey: key,
-      mimeType: file.mimetype,
-      size: file.size,
+      fileKey: req.file.filename,
+      fileUrl: `/files/${req.file.filename}`,
+      size: req.file.size,
+      mimeType: req.file.mimetype,
     });
 
     return res.status(201).json({
       id: version.documentId,
       version: version.versionNumber.toFixed(1),
-      fileUrl: presignedUrl,
+      fileUrl: `/files/${req.file.filename}`,
       uploadedAt: version.createdAt,
     });
   } catch (error) {
-    logger.error("Error creating version:", error);
+    // Clean up uploaded file if version creation fails
+    if (req.file?.path) {
+      try {
+        await fs.promises.unlink(req.file.path);
+      } catch (unlinkError: any) {
+        logger.error("Error cleaning up file:", {
+          message: unlinkError.message,
+          path: req.file.path,
+        });
+      }
+    }
     next(error);
   }
 };
@@ -133,27 +141,16 @@ export const deleteVersions = async (
   try {
     const { id } = req.params;
 
-    // Find all versions to get their fileKeys
     const versions = await Version.find({ documentId: id });
-    
-    // Delete files from S3
-    await Promise.all(
-      versions.map(async (version) => {
-        try {
-          // Delete file from S3
-          await deleteFromS3(version.fileKey);
-        } catch (error) {
-          logger.error(`Error deleting file ${version.fileKey} from S3:`, error);
-          // Continue with other deletions even if one fails
-        }
-      })
-    );
 
-    // Delete all versions from database
+    // Delete all files
+    await Promise.all(versions.map((version) => deleteFile(version.fileKey)));
+
+    // Delete version records
     await Version.deleteMany({ documentId: id });
 
     return res.status(200).json({
-      message: `Successfully deleted all versions for document ${id}`
+      message: `Successfully deleted all versions for document ${id}`,
     });
   } catch (error) {
     logger.error("Error deleting versions:", error);

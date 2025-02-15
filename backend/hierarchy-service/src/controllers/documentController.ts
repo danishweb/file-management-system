@@ -2,7 +2,11 @@ import { NextFunction, Request, Response } from "express";
 import { matchedData } from "express-validator";
 import { Document } from "../models/Document";
 import { versionApi } from "../services/versionApi";
-import { BadRequestError, NotFoundError } from "../utils/errors";
+import {
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../utils/errors";
 import logger from "../utils/logger";
 import { Folder } from "../models/Folder";
 
@@ -100,33 +104,17 @@ export const createVersion = async (
 ) => {
   try {
     const { id, versionNumber } = matchedData(req);
-    const userId = req.user?.id;
+
     const file = req.file;
 
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
     if (!file) {
-      return res.status(400).json({ message: "File is required" });
-    }
-
-    const document = await Document.findOne({
-      _id: id,
-      deletedAt: null,
-      isDeleted: false,
-      access: { $elemMatch: { userId } },
-    });
-
-    if (!document) {
-      return res.status(404).json({ message: "Document not found" });
+      throw new BadRequestError("File is required");
     }
 
     const newVersion = await versionApi.createVersion(id, file, versionNumber);
 
     res.status(201).json(newVersion);
   } catch (error) {
-    console.error(error);
     next(error);
   }
 };

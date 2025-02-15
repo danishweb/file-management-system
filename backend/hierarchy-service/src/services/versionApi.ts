@@ -1,5 +1,7 @@
+import axios from "axios";
+import FormData from "form-data";
+import fs from "fs";
 import {
-  ApiErrorResponse,
   CreateVersionResponse,
   GetAllVersionsResponse,
 } from "../types/version";
@@ -23,31 +25,31 @@ export class VersionApiService {
 
   private async fetchApi<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: { method?: string; headers?: any; data?: any } = {}
   ): Promise<T> {
     try {
-      // Add API key to headers
       const headers = {
-        ...options.headers,
         "x-api-key": this.apiKey,
+        ...options.headers,
       };
 
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        ...options,
+      const response = await axios({
+        url: `${this.baseUrl}${endpoint}`,
+        method: options.method || "GET",
         headers,
+        data: options.data,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        const error = data as ApiErrorResponse;
-        throw new BadRequestError(error.message || "Version service error");
-      }
-
-      return data as T;
-    } catch (error) {
-      logger.error("Version API error:", error);
-      throw error;
+      return response.data as T;
+    } catch (error: any) {
+      logger.error("Version API error:", {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      throw new BadRequestError(
+        error.response?.data?.message || "Version service error"
+      );
     }
   }
 
@@ -63,14 +65,57 @@ export class VersionApiService {
     versionNumber?: number
   ): Promise<CreateVersionResponse> {
     const formData = new FormData();
-    formData.append("file", new Blob([file.buffer]), file.originalname);
-    if (versionNumber)
-      formData.append("versionNumber", versionNumber.toString());
 
-    return this.fetchApi<CreateVersionResponse>(`/versions/${documentId}`, {
-      method: "POST",
-      body: formData,
+    // Create a read stream from the temp file
+    const fileStream = fs.createReadStream(file.path);
+    formData.append("file", fileStream, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+      knownLength: file.size,
     });
+
+    if (versionNumber) {
+      formData.append("versionNumber", versionNumber.toString());
+    }
+
+    try {
+      const response = await this.fetchApi<CreateVersionResponse>(
+        `/versions/${documentId}`,
+        {
+          method: "POST",
+          headers: {
+            ...formData.getHeaders(),
+            "x-api-key": this.apiKey,
+          },
+          data: formData,
+        }
+      );
+
+      // Clean up temp file after successful upload
+      try {
+        await fs.promises.unlink(file.path);
+      } catch (unlinkError: any) {
+        logger.error("Error cleaning up temp file:", {
+          message: unlinkError.message,
+          path: file.path,
+        });
+      }
+
+      return response;
+    } catch (error: any) {
+      // Clean up temp file in case of error
+      try {
+        await fs.promises.unlink(file.path);
+      } catch (unlinkError: any) {
+        logger.error("Error cleaning up temp file:", {
+          message: unlinkError.message,
+          path: file.path,
+        });
+      }
+      throw new BadRequestError(
+        error.response?.data?.message || "Failed to create version"
+      );
+    }
   }
 
   public async deleteVersions(documentId: string): Promise<void> {

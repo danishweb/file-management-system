@@ -22,8 +22,8 @@ router.get("/:id", validate(getVersionsValidation), getAllVersions);
 // Create new version with file upload
 router.post(
   "/:id",
-  uploadMiddleware,
   validate(createVersionValidation),
+  uploadMiddleware,
   createVersion
 );
 

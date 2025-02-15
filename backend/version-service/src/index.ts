@@ -3,6 +3,7 @@ import { config } from "dotenv";
 config();
 
 import express, { Express, Request, Response } from "express";
+import path from "path";
 import { connectDatabase } from "./config/database";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
@@ -11,10 +12,18 @@ import logger from "./utils/logger";
 
 const app: Express = express();
 const PORT: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 5003;
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+
 
 // Middleware
 app.use(express.json());
 app.use(requestLogger);
+
+// Serve static files from the uploads directory
+app.use('/files', express.static(UPLOAD_DIR, {
+  maxAge: '1d', // Cache files for 1 day
+  immutable: true
+}));
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
