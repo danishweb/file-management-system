@@ -10,6 +10,91 @@ The system consists of four microservices:
 - **Hierarchy Service** (Port: 5002): Manages file/folder hierarchy and structure
 - **Version Service** (Port: 5003): Manages file versioning and storage
 
+For detailed technical architecture and implementation details, check out my [Architecture Documentation](./ARCHITECTURE.md).
+
+## Trade-off Analysis (The Good & The Bad)
+
+Hey there! 👋 Let me walk you through the choices I made while building this system and why I made them. Every choice has its ups and downs, so let's break it down:
+
+### 1. Breaking it into Small Pieces (Microservices) 🧩
+Think of it like having different specialists instead of one person doing everything.
+
+**What's Cool About It:**
+- Each part can grow on its own (like adding more power to just the upload service when needed)
+- If one part breaks, the others keep working (like if user login is down, people can still view files)
+
+**The Not-So-Cool Parts:**
+- More moving parts = more complexity (like coordinating between different pieces)
+- Things take a bit longer (messages have to travel between services)
+
+### 2. How I Store Folders (Data Structure) 📁
+I had two ways to store folder structures - like a family tree or a full address.
+
+**The Full Address Way (What I Chose):**
+```
+/Documents/Work/Project1
+```
+- Super fast to find things (like typing your full address vs giving directions)
+- BUT moving folders around is slower (like changing everyone's address when a street name changes)
+
+### 3. Handling File Uploads 📤
+I needed to decide how to handle files when people upload them.
+
+**What I Did:**
+- Save files to disk temporarily (like a staging area)
+- Keep track of versions (like 1.0, 1.1, 2.0)
+
+**Good Stuff:**
+- Won't crash if someone uploads a huge file
+- Keeps track of changes nicely
+
+**Challenges:**
+- Files sit on disk temporarily (needs cleanup)
+- Might get messy if two people upload at the exact same time
+
+### 4. Security Stuff 🔒
+I went with simple API keys for now.
+
+**The Good:**
+- Easy to set up and use
+- Gets the job done
+
+**The 'Could Be Better':**
+- Not as secure as it could be
+- Planning to upgrade to something fancier (JWT) later
+
+### 5. Cleaning Up After Ourselves 🧹
+I made sure to clean up temporary files.
+
+**What's Nice:**
+- Keeps the system tidy
+- Doesn't waste space
+
+**What Could Be Better:**
+- Sometimes cleanup might fail silently
+- Might need a cleanup crew (background job) later
+
+### 6. Where I Store Files 💾
+Right now, files are stored on the same computer running the service.
+
+**Why I Did This:**
+- Easy to build and test
+- Works great for getting started
+
+**Future Plans:**
+- Move to cloud storage (like AWS S3)
+- Better for handling lots of files and keeping them safe
+
+### The Bottom Line 🎯
+I made choices that help me:
+1. Get up and running quickly
+2. Keep things organized
+3. Make it easy to improve later
+
+But I know some things could be better, and I've got plans to upgrade as the system grows! 
+
+Need more details about any of these choices? Just ask! 😊
+
 ## Prerequisites
 
 - Node.js (v16 or higher)
